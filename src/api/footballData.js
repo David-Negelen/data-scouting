@@ -1,6 +1,6 @@
 // football-data.org — free tier requires an API key.
 // User enters it in Settings; it's stored in localStorage under 'scout-settings'.
-const BASE = 'https://api.football-data.org/v4'
+const BASE = '/api/football-data'
 
 const getKey = () => {
   try {

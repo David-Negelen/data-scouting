@@ -14,6 +14,11 @@ export default defineConfig({
         changeOrigin: true,
         rewrite: (p) => p.replace(/^\/api\/transfermarkt/, ''),
       },
+      '/api/football-data': {
+        target: 'https://api.football-data.org/v4',
+        changeOrigin: true,
+        rewrite: (p) => p.replace(/^\/api\/football-data/, ''),
+      },
     },
   },
 })
