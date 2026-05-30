@@ -4,6 +4,7 @@ import { usePlayers } from '@/hooks/usePlayers'
 import PlayerList from '@/components/players/PlayerList'
 import PlayerSearch from '@/components/players/PlayerSearch'
 import PlayerForm from '@/components/players/PlayerForm'
+import LeagueImportModal from '@/components/players/LeagueImportModal'
 import { parsePlayerCSV, exportPlayersCSV, downloadCSV } from '@/utils/csvParser'
 import { downloadJSON } from '@/utils/exportPDF'
 
@@ -48,6 +49,9 @@ export default function PlayersPage() {
         </button>
         <button className="btn btn-secondary" onClick={() => setModal('search')}>
           🔍 Search Transfermarkt
+        </button>
+        <button className="btn btn-secondary" onClick={() => setModal('league')}>
+          Import League
         </button>
 
         <div style={{ flex: 1 }} />
@@ -112,7 +116,7 @@ export default function PlayersPage() {
           >
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 18 }}>
               <h2 style={{ fontSize: 20 }}>
-                {modal === 'add' ? 'Add New Player' : 'Search Transfermarkt'}
+                {modal === 'add' ? 'Add New Player' : modal === 'search' ? 'Search Transfermarkt' : 'Import Whole League'}
               </h2>
               <button className="btn btn-ghost" onClick={() => setModal(null)}>✕</button>
             </div>
@@ -121,8 +125,10 @@ export default function PlayersPage() {
                 onSubmit={(data) => { addPlayer(data); setModal(null) }}
                 onCancel={() => setModal(null)}
               />
-            ) : (
+            ) : modal === 'search' ? (
               <PlayerSearch onSelect={handleSearchSelect} />
+            ) : (
+              <LeagueImportModal onClose={() => setModal(null)} />
             )}
           </div>
         </div>

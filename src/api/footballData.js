@@ -24,3 +24,5 @@ export const getCompetitionMatches = (code, season) =>
 export const getTeamSquad = (teamId) => get(`/teams/${teamId}`)
 
 export const getCompetitionStandings = (code) => get(`/competitions/${code}/standings`)
+
+export const getCompetitionTeams = (code) => get(`/competitions/${code}/teams`)
