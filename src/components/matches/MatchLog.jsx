@@ -36,23 +36,70 @@ export default function MatchLog({ player }) {
   const [addingNew, setAddingNew] = useState(false)
   const [editingId, setEditingId] = useState(null)
 
-  const logs = [...(player.matchLogs ?? [])].sort(
+  const allLogs = [...(player.matchLogs ?? [])].sort(
     (a, b) => new Date(b.date) - new Date(a.date),
   )
+  const seasonLogs = allLogs.filter((l) => l.isSeason || l.competition === 'FotMob Import')
+  const matchLogs  = allLogs.filter((l) => !l.isSeason && l.competition !== 'FotMob Import')
 
-  const goalsData = logs
+  const goalsData = matchLogs
     .slice()
     .reverse()
     .map((l, i) => ({ i, value: l.goals ?? 0 }))
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+      {/* Season stats from FotMob */}
+      {seasonLogs.map((log) => {
+        const stats = [
+          { label: 'Apps',   value: log.apps },
+          { label: 'Mins',   value: log.totalMinutes },
+          { label: 'Goals',  value: log.goals },
+          { label: 'Assists',value: log.assists },
+          { label: 'xG',    value: log.xG != null ? Number(log.xG).toFixed(1) : null },
+          { label: 'xA',    value: log.xA != null ? Number(log.xA).toFixed(1) : null },
+          { label: 'KP',    value: log.keyPasses },
+          { label: 'Int',   value: log.interceptions },
+        ].filter(({ value }) => value != null && value !== 0)
+
+        return (
+          <div
+            key={log.id}
+            className="card"
+            style={{ padding: '12px 16px', borderLeft: '3px solid var(--accent-primary)', display: 'flex', gap: 14, alignItems: 'center', flexWrap: 'wrap' }}
+          >
+            <div style={{ minWidth: 120 }}>
+              <div style={{ fontSize: 12, fontWeight: 600 }}>{log.opponent}</div>
+              <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>FotMob · Season Stats</div>
+            </div>
+            <div style={{ display: 'flex', gap: 12, flex: 1, flexWrap: 'wrap' }}>
+              {stats.map(({ label, value }) => (
+                <div key={label} style={{ textAlign: 'center' }}>
+                  <div style={{ fontSize: 10, color: 'var(--text-muted)' }}>{label}</div>
+                  <div style={{ fontFamily: 'JetBrains Mono', fontWeight: 700, fontSize: 14, color: 'var(--accent-primary)' }}>
+                    {value}
+                  </div>
+                </div>
+              ))}
+            </div>
+            <button
+              className="btn btn-ghost"
+              style={{ fontSize: 11, padding: '3px 8px', color: 'var(--danger)', flexShrink: 0 }}
+              onClick={() => deleteMatchLog(player.id, log.id)}
+            >
+              Delete
+            </button>
+          </div>
+        )
+      })}
+
+      {/* Match log header */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <div style={{ display: 'flex', gap: 20 }}>
           {[
-            { label: 'Matches', value: logs.length },
-            { label: 'Goals', value: logs.reduce((a, l) => a + (l.goals ?? 0), 0) },
-            { label: 'Assists', value: logs.reduce((a, l) => a + (l.assists ?? 0), 0) },
+            { label: 'Matches', value: matchLogs.length },
+            { label: 'Goals',   value: matchLogs.reduce((a, l) => a + (l.goals ?? 0), 0) },
+            { label: 'Assists', value: matchLogs.reduce((a, l) => a + (l.assists ?? 0), 0) },
           ].map(({ label, value }) => (
             <div key={label}>
               <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>{label}</div>
@@ -80,14 +127,14 @@ export default function MatchLog({ player }) {
         </div>
       )}
 
-      {!logs.length && !addingNew && (
+      {!matchLogs.length && !addingNew && (
         <div className="empty-state">
           <p>No match logs yet.</p>
           <button className="btn btn-secondary" onClick={() => setAddingNew(true)}>Log first match</button>
         </div>
       )}
 
-      {logs.map((log) => {
+      {matchLogs.map((log) => {
         if (editingId === log.id) {
           return (
             <div key={log.id} className="card" style={{ padding: 20 }}>
@@ -101,10 +148,10 @@ export default function MatchLog({ player }) {
         }
 
         const keyStats = [
-          { label: 'G', value: log.goals },
-          { label: 'A', value: log.assists },
-          { label: 'KP', value: log.keyPasses },
-          { label: 'xG', value: log.xG?.toFixed?.(2) },
+          { label: 'G',    value: log.goals },
+          { label: 'A',    value: log.assists },
+          { label: 'KP',   value: log.keyPasses },
+          { label: 'xG',   value: log.xG?.toFixed?.(2) },
           { label: 'Mins', value: log.minutesPlayed },
         ].filter(({ value }) => value != null && value !== 0)
 
@@ -112,13 +159,7 @@ export default function MatchLog({ player }) {
           <div
             key={log.id}
             className="card"
-            style={{
-              padding: '12px 16px',
-              display: 'flex',
-              alignItems: 'center',
-              gap: 14,
-              flexWrap: 'wrap',
-            }}
+            style={{ padding: '12px 16px', display: 'flex', alignItems: 'center', gap: 14, flexWrap: 'wrap' }}
           >
             <div style={{ minWidth: 90 }}>
               <div style={{ fontSize: 12, fontWeight: 600 }}>{fmtDate(log.date)}</div>
@@ -127,14 +168,7 @@ export default function MatchLog({ player }) {
             <div style={{ flex: 1 }}>
               <span style={{ fontWeight: 600 }}>vs {log.opponent || '?'}</span>
               {log.result && (
-                <span
-                  style={{
-                    marginLeft: 8,
-                    fontFamily: 'JetBrains Mono',
-                    fontSize: 12,
-                    color: 'var(--text-muted)',
-                  }}
-                >
+                <span style={{ marginLeft: 8, fontFamily: 'JetBrains Mono', fontSize: 12, color: 'var(--text-muted)' }}>
                   {log.result}
                 </span>
               )}
@@ -143,14 +177,7 @@ export default function MatchLog({ player }) {
               {keyStats.map(({ label, value }) => (
                 <div key={label} style={{ textAlign: 'center' }}>
                   <div style={{ fontSize: 10, color: 'var(--text-muted)' }}>{label}</div>
-                  <div
-                    style={{
-                      fontFamily: 'JetBrains Mono',
-                      fontWeight: 700,
-                      fontSize: 14,
-                      color: 'var(--accent-primary)',
-                    }}
-                  >
+                  <div style={{ fontFamily: 'JetBrains Mono', fontWeight: 700, fontSize: 14, color: 'var(--accent-primary)' }}>
                     {value}
                   </div>
                 </div>

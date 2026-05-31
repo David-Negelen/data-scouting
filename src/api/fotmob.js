@@ -97,34 +97,32 @@ export const mapStatsToMatchLog = (stats, seasonLabel) => {
   const apps = Number(
     stats.matches_uppercase ?? stats.appearances ?? stats.matches ?? stats.matchesPlayed ?? 1
   ) || 1
+  const mins = Number(stats.minutes_played ?? stats.minutesPlayed ?? apps * 90)
 
-  const avg = (...keys) => {
+  const total = (...keys) => {
     for (const k of keys) {
       const v = stats[k]
-      if (v != null && typeof v !== 'object') return Math.round((Number(v) / apps) * 100) / 100
+      if (v != null && typeof v !== 'object') return Math.round(Number(v) * 100) / 100
     }
     return undefined
   }
 
-  const mins = stats.minutes_played ?? stats.minutesPlayed
   return {
     date: new Date().toISOString().split('T')[0],
-    opponent: `Season avg (${seasonLabel})`,
+    opponent: seasonLabel,
     competition: 'FotMob Import',
+    isSeason: true,
+    apps,
+    totalMinutes: mins,
     result: '',
-    minutesPlayed: mins != null ? Math.round(Number(mins) / apps) : 90,
-    goals:          avg('goals'),
-    assists:        avg('assists'),
-    keyPasses:      avg('keyPasses', 'keypasses', 'key_passes'),
-    shotOnTarget:   avg('shotsOnTarget', 'shots_on_target', 'onTargetScoringAttempt'),
-    shotOffTarget:  avg('shotsOffTarget', 'shots_off_target', 'blockedScoringAttempt'),
-    interceptions:  avg('interceptions'),
-    clearances:     avg('clearances'),
-    duelsWon:       avg('successfulDuels', 'duelsWon', 'duel_won'),
-    aerialsWon:     avg('aerialDuelsWon', 'wonContest'),
-    foulsCommitted: avg('foulsCommitted', 'fouls'),
-    foulsWon:       avg('foulsWon', 'wasFouled'),
-    xG:             avg('xGoals', 'expectedGoals', 'xg', 'expected_goals'),
-    xA:             avg('xAssists', 'expectedAssists', 'xa', 'expected_assists'),
+    // season totals (not per-match) — MatchLog renders them as totals
+    goals:          total('goals'),
+    assists:        total('assists'),
+    keyPasses:      total('keyPasses', 'keypasses', 'key_passes'),
+    shotOnTarget:   total('shotsOnTarget', 'shots_on_target'),
+    interceptions:  total('interceptions'),
+    clearances:     total('clearances'),
+    xG:             total('xGoals', 'expectedGoals', 'xg', 'expected_goals'),
+    xA:             total('xAssists', 'expectedAssists', 'xa', 'expected_assists'),
   }
 }
