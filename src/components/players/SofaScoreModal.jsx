@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { searchPlayers, getPlayerProfile, getPlayerStats, getSeasonOptions, mapStatsToMatchLog } from '@/api/fotmob'
+import { searchPlayers, getPlayerProfile, getSeasonOptions, mapStatsToMatchLog } from '@/api/fotmob'
 import { usePlayersStore } from '@/store'
 
 export default function SofaScoreModal({ player, onClose }) {
@@ -42,7 +42,7 @@ export default function SofaScoreModal({ player, onClose }) {
     setLoading(true)
     setError('')
     try {
-      const profile = await getPlayerProfile(candidate.id)
+      const profile = await getPlayerProfile(candidate.id, candidate.name)
       const opts = getSeasonOptions(profile)
       setSelected({ ...candidate, fotmobId: String(candidate.id) })
       setOptions(opts)
@@ -55,22 +55,13 @@ export default function SofaScoreModal({ player, onClose }) {
     }
   }
 
-  const handleImport = async () => {
+  const handleImport = () => {
     const opt = options[optionIdx]
     if (!opt) return
-    setLoading(true)
-    setError('')
-    try {
-      const statsData = await getPlayerStats(opt.playerId, opt.seasonId, opt.isFirstSeason)
-      const log = mapStatsToMatchLog(statsData, opt.label)
-      addMatchLog(player.id, log)
-      updatePlayer(player.id, { fotmobId: selected.fotmobId })
-      setStep('done')
-    } catch (e) {
-      setError(e.message)
-    } finally {
-      setLoading(false)
-    }
+    const log = mapStatsToMatchLog(opt.stats, opt.seasonName)
+    addMatchLog(player.id, log)
+    updatePlayer(player.id, { fotmobId: selected.fotmobId })
+    setStep('done')
   }
 
   return (
