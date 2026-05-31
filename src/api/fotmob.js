@@ -55,7 +55,9 @@ export const getSeasonOptions = (pageData) => {
   // Best case: full statSeasons breakdown (multi-season, multi-competition)
   if (data.statSeasons?.length) {
     const firstT = data.statSeasons[0]?.tournaments?.[0]
-    if (firstT) log('[FotMob] tournament keys', { keys: Object.keys(firstT), statSample: firstT.stats?.slice(0, 3) })
+    const firstSeason = data.statSeasons[0]
+    if (firstSeason) log('[FotMob] season keys', { seasonKeys: Object.keys(firstSeason), firstSeason })
+    if (firstT) log('[FotMob] tournament keys', { tournamentKeys: Object.keys(firstT), firstT })
     const options = []
     for (const season of data.statSeasons) {
       for (const t of season.tournaments ?? []) {
