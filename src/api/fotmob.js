@@ -1,3 +1,5 @@
+import { log, logError } from '@/utils/logger'
+
 const BASE = '/api/fotmob'
 const PAGE = '/fotmob-page'
 
@@ -53,7 +55,7 @@ export const getSeasonOptions = (pageData) => {
   // Best case: full statSeasons breakdown (multi-season, multi-competition)
   if (data.statSeasons?.length) {
     const firstT = data.statSeasons[0]?.tournaments?.[0]
-    if (firstT) console.log('[FotMob] tournament keys:', Object.keys(firstT), 'stat sample:', firstT.stats?.slice(0, 3))
+    if (firstT) log('[FotMob] tournament keys', { keys: Object.keys(firstT), statSample: firstT.stats?.slice(0, 3) })
     const options = []
     for (const season of data.statSeasons) {
       for (const t of season.tournaments ?? []) {
@@ -88,7 +90,7 @@ export const getSeasonOptions = (pageData) => {
     }]
   }
 
-  console.log('[FotMob] data keys:', Object.keys(data))
+  logError('[FotMob] no stats found, data keys', Object.keys(data))
   return []
 }
 
@@ -97,7 +99,7 @@ export const getSeasonOptions = (pageData) => {
 // ------------------------------------------------------------------
 
 export const mapStatsToMatchLog = (stats, seasonLabel) => {
-  console.log('[FotMob] mapStats keys:', Object.keys(stats), 'values:', stats)
+  log('[FotMob] mapStats', { keys: Object.keys(stats), values: stats })
   const apps = Number(
     stats.matches_uppercase ?? stats.appearances ?? stats.matches ?? stats.matchesPlayed ?? 1
   ) || 1
