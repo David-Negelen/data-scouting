@@ -52,6 +52,8 @@ export const getSeasonOptions = (pageData) => {
 
   // Best case: full statSeasons breakdown (multi-season, multi-competition)
   if (data.statSeasons?.length) {
+    const firstT = data.statSeasons[0]?.tournaments?.[0]
+    if (firstT) console.log('[FotMob] tournament keys:', Object.keys(firstT), 'stat sample:', firstT.stats?.slice(0, 3))
     const options = []
     for (const season of data.statSeasons) {
       for (const t of season.tournaments ?? []) {
@@ -59,8 +61,9 @@ export const getSeasonOptions = (pageData) => {
         for (const s of t.stats ?? []) {
           if (s.key) stats[s.key] = s.value
         }
+        const name = t.leagueName ?? t.tournamentName ?? t.name ?? t.title ?? t.league ?? ''
         options.push({
-          label: `${season.seasonName ?? ''} — ${t.leagueName ?? t.tournamentName ?? ''}`,
+          label: `${season.seasonName ?? ''} — ${name}`,
           seasonName: season.seasonName ?? '',
           stats,
         })
@@ -94,6 +97,7 @@ export const getSeasonOptions = (pageData) => {
 // ------------------------------------------------------------------
 
 export const mapStatsToMatchLog = (stats, seasonLabel) => {
+  console.log('[FotMob] mapStats keys:', Object.keys(stats), 'values:', stats)
   const apps = Number(
     stats.matches_uppercase ?? stats.appearances ?? stats.matches ?? stats.matchesPlayed ?? 1
   ) || 1
