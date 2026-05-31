@@ -52,15 +52,20 @@ export default function MatchLog({ player }) {
       {/* Season stats from FotMob */}
       {seasonLogs.map((log) => {
         const stats = [
-          { label: 'Apps',   value: log.apps },
-          { label: 'Mins',   value: log.totalMinutes },
-          { label: 'Goals',  value: log.goals },
-          { label: 'Assists',value: log.assists },
-          { label: 'xG',    value: log.xG != null ? Number(log.xG).toFixed(1) : null },
-          { label: 'xA',    value: log.xA != null ? Number(log.xA).toFixed(1) : null },
-          { label: 'KP',    value: log.keyPasses },
-          { label: 'Int',   value: log.interceptions },
-        ].filter(({ value }) => value != null && value !== 0)
+          { label: 'Apps',    value: log.apps },
+          { label: 'Started', value: log.started },
+          { label: 'Mins',    value: log.totalMinutes },
+          { label: 'Goals',   value: log.goals },
+          { label: 'Assists', value: log.assists },
+          { label: 'xG',      value: log.xG != null ? Number(log.xG).toFixed(2) : null },
+          { label: 'xA',      value: log.xA != null ? Number(log.xA).toFixed(2) : null },
+          { label: 'KP',      value: log.keyPasses },
+          { label: 'SoT',     value: log.shotOnTarget },
+          { label: 'Int',     value: log.interceptions },
+          { label: 'Rating',  value: log.rating != null ? Number(log.rating).toFixed(2) : null },
+          { label: 'YC',      value: log.yellowCards || null },
+          { label: 'RC',      value: log.redCards || null },
+        ].filter(({ value }) => value != null)
 
         return (
           <div
