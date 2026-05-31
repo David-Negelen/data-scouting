@@ -176,7 +176,7 @@ export default function PlayerDetailPage() {
         >
           <div className="card" style={{ width: '100%', maxWidth: 480, padding: 24 }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 18 }}>
-              <h2 style={{ fontSize: 18 }}>Fetch Stats from SofaScore</h2>
+              <h2 style={{ fontSize: 18 }}>Fetch Stats from FotMob</h2>
               <button className="btn btn-ghost" onClick={() => setSofaScoreOpen(false)}>✕</button>
             </div>
             <SofaScoreModal player={player} onClose={() => setSofaScoreOpen(false)} />
