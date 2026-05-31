@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { searchPlayers, getPlayerData, getSeasonOptions, mapStatsToMatchLog } from '@/api/fotmob'
+import { searchPlayers, getPlayerProfile, getPlayerStats, getSeasonOptions, mapStatsToMatchLog } from '@/api/fotmob'
 import { usePlayersStore } from '@/store'
 
 export default function SofaScoreModal({ player, onClose }) {
@@ -42,8 +42,8 @@ export default function SofaScoreModal({ player, onClose }) {
     setLoading(true)
     setError('')
     try {
-      const data = await getPlayerData(candidate.id)
-      const opts = getSeasonOptions(data)
+      const profile = await getPlayerProfile(candidate.id)
+      const opts = getSeasonOptions(profile)
       setSelected({ ...candidate, fotmobId: String(candidate.id) })
       setOptions(opts)
       setOptionIdx(0)
@@ -55,13 +55,22 @@ export default function SofaScoreModal({ player, onClose }) {
     }
   }
 
-  const handleImport = () => {
+  const handleImport = async () => {
     const opt = options[optionIdx]
     if (!opt) return
-    const log = mapStatsToMatchLog(opt.stats, opt.seasonName)
-    addMatchLog(player.id, log)
-    updatePlayer(player.id, { fotmobId: selected.fotmobId })
-    setStep('done')
+    setLoading(true)
+    setError('')
+    try {
+      const statsData = await getPlayerStats(opt.playerId, opt.seasonId, opt.isFirstSeason)
+      const log = mapStatsToMatchLog(statsData, opt.label)
+      addMatchLog(player.id, log)
+      updatePlayer(player.id, { fotmobId: selected.fotmobId })
+      setStep('done')
+    } catch (e) {
+      setError(e.message)
+    } finally {
+      setLoading(false)
+    }
   }
 
   return (
@@ -133,8 +142,8 @@ export default function SofaScoreModal({ player, onClose }) {
           {step === 'done' ? 'Close' : 'Cancel'}
         </button>
         {step === 'seasons' && options.length > 0 && (
-          <button className="btn btn-primary" onClick={handleImport}>
-            Import Stats
+          <button className="btn btn-primary" onClick={handleImport} disabled={loading}>
+            {loading ? 'Fetching…' : 'Import Stats'}
           </button>
         )}
         {step === 'search' && !loading && (

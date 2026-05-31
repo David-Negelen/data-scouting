@@ -9,54 +9,73 @@ const get = async (path) => {
 export const searchPlayers = (name) =>
   get(`/data/search/suggest?hits=50&lang=en&term=${encodeURIComponent(name)}`)
 
-export const getPlayerData = (id) =>
-  get(`/playerData?id=${id}`)
+// GET /api/players?id={id} — player profile + career seasons
+export const getPlayerProfile = (id) =>
+  get(`/players?id=${id}`)
 
-// FotMob stats come as [{key, value, title}] — convert to plain object
-const statsObj = (statsArr) =>
-  Object.fromEntries((statsArr ?? []).map((s) => [s.key, s.value]))
+// GET /api/playerStats?playerId={id}&seasonId={year}-{compIdx}&isFirstSeason=false
+export const getPlayerStats = (playerId, seasonId, isFirstSeason = false) =>
+  get(`/playerStats?playerId=${playerId}&seasonId=${encodeURIComponent(seasonId)}&isFirstSeason=${isFirstSeason}`)
 
-// Extract season+tournament options from playerData for the dropdown
-export const getSeasonOptions = (playerData) => {
+// Extract season+competition options from /api/players profile data
+// Returns [{label, playerId, seasonId, isFirstSeason}] for the dropdown
+export const getSeasonOptions = (profile) => {
   const options = []
-  for (const season of playerData.statSeasons ?? []) {
-    for (const t of season.tournaments ?? []) {
-      options.push({
-        label: `${season.seasonName} — ${t.leagueName ?? t.tournamentName ?? ''}`,
-        seasonName: season.seasonName,
-        stats: statsObj(t.stats),
+  const career = profile?.careerHistory?.careerItems?.clubCareer ?? []
+  career.forEach((club, _ci) => {
+    ;(club.seasons ?? []).forEach((season, si) => {
+      ;(season.leagueStats ?? [season]).forEach((_ls, li) => {
+        if (season.seasonId != null) {
+          options.push({
+            label: `${season.seasonName ?? season.season} — ${club.name ?? ''}`,
+            playerId: profile?.id,
+            seasonId: season.seasonId,
+            isFirstSeason: si === 0 && li === 0,
+          })
+        }
       })
-    }
-  }
+    })
+  })
   return options
 }
 
-// Map FotMob stats object + appearances to a per-match-average match log entry
-export const mapStatsToMatchLog = (stats, seasonLabel) => {
-  const apps = stats.matches ?? stats.appearances ?? stats.matchesPlayed ?? 1
-  const avg = (n) => (n != null && apps > 0) ? Math.round((n / apps) * 100) / 100 : undefined
+// Map /api/playerStats response to a per-match-average match log entry
+export const mapStatsToMatchLog = (statsResponse, seasonLabel) => {
+  // statsResponse.statsSection.items[] contains stat groups
+  const items = statsResponse?.statsSection?.items ?? []
+  const stats = {}
+  for (const item of items) {
+    for (const stat of item.items ?? [item]) {
+      if (stat.key) stats[stat.key] = stat.statValue?.value ?? stat.value
+    }
+  }
+
+  const apps = Number(stats.appearances ?? stats.matches ?? stats.matchesPlayed ?? 1) || 1
+  const avg = (keys) => {
+    for (const k of keys) {
+      if (stats[k] != null) return Math.round((Number(stats[k]) / apps) * 100) / 100
+    }
+    return undefined
+  }
 
   return {
     date: new Date().toISOString().split('T')[0],
     opponent: `Season avg (${seasonLabel})`,
     competition: 'FotMob Import',
     result: '',
-    minutesPlayed: apps > 0 ? Math.round((stats.minutesPlayed ?? 90 * apps) / apps) : 90,
-    goals:          avg(stats.goals),
-    assists:        avg(stats.assists),
-    keyPasses:      avg(stats.keyPasses ?? stats.keypasses),
-    shotOnTarget:   avg(stats.shotsOnTarget ?? stats.onTargetScoringAttempt),
-    shotOffTarget:  avg(stats.shotsOffTarget ?? stats.blockedScoringAttempt),
-    interceptions:  avg(stats.interceptions),
-    clearances:     avg(stats.clearances),
-    duelsWon:       avg(stats.successfulDuels ?? stats.duelsWon),
-    aerialsWon:     avg(stats.aerialDuelsWon ?? stats.wonContest),
-    foulsCommitted: avg(stats.foulsCommitted ?? stats.fouls),
-    foulsWon:       avg(stats.foulsWon ?? stats.wasFouled),
-    xG:             avg(stats.xGoals ?? stats.expectedGoals ?? stats.xg),
-    xA:             avg(stats.xAssists ?? stats.expectedAssists ?? stats.xa),
-    distanceCovered: stats.distanceRan != null && apps > 0
-      ? Math.round((stats.distanceRan / apps) * 10) / 10
-      : undefined,
+    minutesPlayed: stats.minutesPlayed != null ? Math.round(Number(stats.minutesPlayed) / apps) : 90,
+    goals:          avg(['goals']),
+    assists:        avg(['assists']),
+    keyPasses:      avg(['keyPasses', 'keypasses']),
+    shotOnTarget:   avg(['shotsOnTarget', 'onTargetScoringAttempt']),
+    shotOffTarget:  avg(['shotsOffTarget', 'blockedScoringAttempt']),
+    interceptions:  avg(['interceptions']),
+    clearances:     avg(['clearances']),
+    duelsWon:       avg(['successfulDuels', 'duelsWon']),
+    aerialsWon:     avg(['aerialDuelsWon', 'wonContest']),
+    foulsCommitted: avg(['foulsCommitted', 'fouls']),
+    foulsWon:       avg(['foulsWon', 'wasFouled']),
+    xG:             avg(['xGoals', 'expectedGoals', 'xg']),
+    xA:             avg(['xAssists', 'expectedAssists', 'xa']),
   }
 }
