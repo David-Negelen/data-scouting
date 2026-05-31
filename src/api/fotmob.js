@@ -53,7 +53,10 @@ export const getSeasonOptions = (pageData) => {
   const statSeasons = data?.statSeasons ?? data?.career?.statSeasons ?? []
 
   if (!statSeasons.length) {
-    console.log('[FotMob] No statSeasons found in:', Object.keys(data ?? {}))
+    console.log('[FotMob] pageData keys:', Object.keys(pageData ?? {}))
+    console.log('[FotMob] pageProps keys:', Object.keys(pageData?.pageProps ?? {}))
+    console.log('[FotMob] data keys:', Object.keys(data ?? {}))
+    console.log('[FotMob] raw data (first 3000 chars):', JSON.stringify(data).slice(0, 3000))
     return []
   }
 
