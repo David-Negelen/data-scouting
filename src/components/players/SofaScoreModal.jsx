@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { searchPlayers, getPlayerProfile, getSeasonOptions, mapStatsToMatchLog } from '@/api/fotmob'
+import { searchPlayers, getPlayerProfile, getSeasonOptions, fetchPlayerSeasonStats, mapStatsToMatchLog } from '@/api/fotmob'
 import { usePlayersStore } from '@/store'
 
 export default function SofaScoreModal({ player, onClose }) {
@@ -55,13 +55,29 @@ export default function SofaScoreModal({ player, onClose }) {
     }
   }
 
-  const handleImport = () => {
+  const handleImport = async () => {
     const opt = options[optionIdx]
     if (!opt) return
-    const log = mapStatsToMatchLog(opt.stats, opt.seasonName)
-    addMatchLog(player.id, log)
-    updatePlayer(player.id, { fotmobId: selected.fotmobId })
-    setStep('done')
+    setLoading(true)
+    setError('')
+    try {
+      let stats = opt.stats
+      if (!stats && opt.tournamentId) {
+        stats = await fetchPlayerSeasonStats(selected.fotmobId, opt.tournamentId)
+      }
+      if (!stats || Object.keys(stats).length === 0) {
+        setError('No stats available for this season/competition.')
+        return
+      }
+      const entry = mapStatsToMatchLog(stats, opt.seasonName)
+      addMatchLog(player.id, entry)
+      updatePlayer(player.id, { fotmobId: selected.fotmobId })
+      setStep('done')
+    } catch (e) {
+      setError(e.message)
+    } finally {
+      setLoading(false)
+    }
   }
 
   return (
@@ -117,7 +133,7 @@ export default function SofaScoreModal({ player, onClose }) {
           )}
           {error && <p style={{ fontSize: 13, color: 'var(--danger)' }}>{error}</p>}
           <p style={{ fontSize: 12, color: 'var(--text-muted)' }}>
-            Season totals are divided by appearances to produce per-match averages, saved as a Match Log entry.
+            Season totals will be saved as a season stats entry in the Match Logs tab.
           </p>
         </>
       )}

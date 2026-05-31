@@ -51,49 +51,77 @@ export const getPlayerProfile = async (id, name) => {
 
 export const getSeasonOptions = (pageData) => {
   const data = pageData?.pageProps?.data ?? {}
+  const options = []
 
-  // Best case: full statSeasons breakdown (multi-season, multi-competition)
+  // statSeasons lists available seasons/tournaments but has no inline stats.
+  // Mark them with tournamentId so the modal can fetch stats on demand.
   if (data.statSeasons?.length) {
-    const firstT = data.statSeasons[0]?.tournaments?.[0]
-    const firstSeason = data.statSeasons[0]
-    if (firstSeason) log('[FotMob] season keys', { seasonKeys: Object.keys(firstSeason), firstSeason })
-    if (firstT) log('[FotMob] tournament keys', { tournamentKeys: Object.keys(firstT), firstT })
-    const options = []
     for (const season of data.statSeasons) {
       for (const t of season.tournaments ?? []) {
-        const stats = {}
-        for (const s of t.stats ?? []) {
-          if (s.key) stats[s.key] = s.value
-        }
-        const name = t.leagueName ?? t.tournamentName ?? t.name ?? t.title ?? t.league ?? ''
+        const name = t.name ?? t.leagueName ?? t.tournamentName ?? ''
         options.push({
           label: `${season.seasonName ?? ''} — ${name}`,
           seasonName: season.seasonName ?? '',
-          stats,
+          tournamentId: t.tournamentId,
+          stats: null, // fetched lazily
         })
       }
     }
-    if (options.length) return options
   }
 
-  // Fallback: mainLeague has current season summary stats
+  // mainLeague always has inline stats. Find the matching option and attach them,
+  // or prepend a new option if it's not already listed.
   const ml = data.mainLeague
   if (ml?.stats?.length) {
     const stats = {}
     for (const s of ml.stats) {
-      // localizedTitleId is the stable key (e.g. "goals", "assists", "matches_uppercase")
       const k = s.localizedTitleId ?? s.title
       if (k && typeof s.value !== 'object') stats[k] = s.value
     }
-    return [{
-      label: `${ml.season} — ${ml.leagueName}`,
-      seasonName: ml.season,
-      stats,
-    }]
+    log('[FotMob] mainLeague stats', stats)
+    const match = options.find(
+      (o) => o.seasonName === ml.season && o.label.includes(ml.leagueName ?? '')
+    )
+    if (match) {
+      match.stats = stats
+    } else {
+      options.unshift({
+        label: `${ml.season} — ${ml.leagueName}`,
+        seasonName: ml.season,
+        tournamentId: ml.tournamentId ?? null,
+        stats,
+      })
+    }
   }
 
-  logError('[FotMob] no stats found, data keys', Object.keys(data))
-  return []
+  if (!options.length) logError('[FotMob] no options found, data keys', Object.keys(data))
+  return options
+}
+
+// ------------------------------------------------------------------
+// Per-season stats fetch (statSeasons entries have no inline stats)
+// ------------------------------------------------------------------
+
+export const fetchPlayerSeasonStats = async (playerId, tournamentId) => {
+  log('[FotMob] fetching playerStats', { playerId, tournamentId })
+  const data = await get(
+    `/playerStats?playerId=${playerId}&tournamentId=${tournamentId}&isTournamentStats=true`
+  )
+  log('[FotMob] playerStats raw', data)
+
+  const result = {}
+  // Try multiple known response shapes
+  const items = [
+    ...(data?.statsSection?.items ?? []),
+    ...(data?.sections?.flatMap?.((s) => s.items ?? []) ?? []),
+    ...(data?.stats ?? []),
+  ]
+  for (const item of items) {
+    const k = item.key ?? item.localizedTitleId
+    if (k && item.value != null && typeof item.value !== 'object') result[k] = item.value
+  }
+  log('[FotMob] playerStats parsed', result)
+  return result
 }
 
 // ------------------------------------------------------------------
