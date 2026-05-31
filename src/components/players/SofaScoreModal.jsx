@@ -23,10 +23,12 @@ export default function SofaScoreModal({ player, onClose }) {
     setError('')
     try {
       const data = await searchPlayers(name)
-      const hits = (data.hits ?? [])
-        .filter((h) => h.hit?.type === 'player' || h.hit?.pageUrl?.includes('/players/'))
+      // Response is [{title:{key}, suggestions:[]}] — use the 'players' group
+      const groups = Array.isArray(data) ? data : []
+      const group = groups.find((g) => g.title?.key === 'players') ?? groups[0]
+      const hits = (group?.suggestions ?? [])
+        .filter((s) => s.type === 'player' && !s.isCoach)
         .slice(0, 6)
-        .map((h) => h.hit)
       setCandidates(hits)
       if (!hits.length) setError('No players found on FotMob.')
     } catch (e) {

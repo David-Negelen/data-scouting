@@ -7,7 +7,7 @@ const get = async (path) => {
 }
 
 export const searchPlayers = (name) =>
-  get(`/searchapi?term=${encodeURIComponent(name)}&lang=en`)
+  get(`/data/search/suggest?hits=50&lang=en&term=${encodeURIComponent(name)}`)
 
 export const getPlayerData = (id) =>
   get(`/playerData?id=${id}`)
