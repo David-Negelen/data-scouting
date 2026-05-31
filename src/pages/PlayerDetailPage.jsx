@@ -7,6 +7,7 @@ import MetricsPanel from '@/components/metrics/MetricsPanel'
 import MatchLog from '@/components/matches/MatchLog'
 import ScoutingReport from '@/components/scouting/ScoutingReport'
 import PlayerForm from '@/components/players/PlayerForm'
+import SofaScoreModal from '@/components/players/SofaScoreModal'
 import ReportPrint from '@/components/scouting/ReportPrint'
 import { useScoutingReports } from '@/hooks/useScoutingReports'
 import { scoreColor, scoreTrend } from '@/utils/metricsCalc'
@@ -25,6 +26,7 @@ export default function PlayerDetailPage() {
 
   const [tab, setTab] = useState('Overview')
   const [editing, setEditing] = useState(false)
+  const [sofaScoreOpen, setSofaScoreOpen] = useState(false)
 
   if (!player) {
     return (
@@ -158,12 +160,29 @@ export default function PlayerDetailPage() {
             </div>
 
             <div style={{ display: 'flex', gap: 8, flexShrink: 0, alignSelf: 'flex-start' }}>
+              <button className="btn btn-secondary" onClick={() => setSofaScoreOpen(true)}>Fetch Stats</button>
               <button className="btn btn-secondary" onClick={() => setEditing(true)}>Edit</button>
               <button className="btn btn-danger" onClick={handleDelete}>Delete</button>
             </div>
           </div>
         )}
       </div>
+
+      {/* SofaScore stats import */}
+      {sofaScoreOpen && (
+        <div
+          style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.7)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 200, padding: 20 }}
+          onClick={(e) => e.target === e.currentTarget && setSofaScoreOpen(false)}
+        >
+          <div className="card" style={{ width: '100%', maxWidth: 480, padding: 24 }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 18 }}>
+              <h2 style={{ fontSize: 18 }}>Fetch Stats from SofaScore</h2>
+              <button className="btn btn-ghost" onClick={() => setSofaScoreOpen(false)}>✕</button>
+            </div>
+            <SofaScoreModal player={player} onClose={() => setSofaScoreOpen(false)} />
+          </div>
+        </div>
+      )}
 
       {/* Tabs */}
       <div>
