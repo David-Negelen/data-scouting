@@ -48,67 +48,83 @@ export const getPlayerProfile = async (id, name) => {
 // ------------------------------------------------------------------
 
 export const getSeasonOptions = (pageData) => {
-  // _next/data wraps everything in pageProps
-  const data = pageData?.pageProps?.initialData ?? pageData?.pageProps ?? pageData
-  const statSeasons = data?.statSeasons ?? data?.career?.statSeasons ?? []
+  const data = pageData?.pageProps?.data ?? {}
 
-  if (!statSeasons.length) {
-    console.log('[FotMob] pageData keys:', Object.keys(pageData ?? {}))
-    console.log('[FotMob] pageProps keys:', Object.keys(pageData?.pageProps ?? {}))
-    console.log('[FotMob] data keys:', Object.keys(data ?? {}))
-    console.log('[FotMob] raw data (first 3000 chars):', JSON.stringify(data).slice(0, 3000))
-    return []
-  }
-
-  const options = []
-  for (const season of statSeasons) {
-    for (const t of season.tournaments ?? []) {
-      const stats = {}
-      for (const s of t.stats ?? []) {
-        if (s.key) stats[s.key] = s.value
+  // Best case: full statSeasons breakdown (multi-season, multi-competition)
+  if (data.statSeasons?.length) {
+    const options = []
+    for (const season of data.statSeasons) {
+      for (const t of season.tournaments ?? []) {
+        const stats = {}
+        for (const s of t.stats ?? []) {
+          if (s.key) stats[s.key] = s.value
+        }
+        options.push({
+          label: `${season.seasonName ?? ''} — ${t.leagueName ?? t.tournamentName ?? ''}`,
+          seasonName: season.seasonName ?? '',
+          stats,
+        })
       }
-      options.push({
-        label: `${season.seasonName ?? ''} — ${t.leagueName ?? t.tournamentName ?? ''}`,
-        seasonName: season.seasonName ?? '',
-        stats,
-      })
     }
+    if (options.length) return options
   }
-  return options
+
+  // Fallback: mainLeague has current season summary stats
+  const ml = data.mainLeague
+  if (ml?.stats?.length) {
+    const stats = {}
+    for (const s of ml.stats) {
+      // localizedTitleId is the stable key (e.g. "goals", "assists", "matches_uppercase")
+      const k = s.localizedTitleId ?? s.title
+      if (k && typeof s.value !== 'object') stats[k] = s.value
+    }
+    return [{
+      label: `${ml.season} — ${ml.leagueName}`,
+      seasonName: ml.season,
+      stats,
+    }]
+  }
+
+  console.log('[FotMob] data keys:', Object.keys(data))
+  return []
 }
 
 // ------------------------------------------------------------------
-// Match log mapping
+// Match log mapping — handles both statSeasons and mainLeague key formats
 // ------------------------------------------------------------------
 
 export const mapStatsToMatchLog = (stats, seasonLabel) => {
-  const apps = Number(stats.appearances ?? stats.matches ?? stats.matchesPlayed ?? 1) || 1
+  const apps = Number(
+    stats.matches_uppercase ?? stats.appearances ?? stats.matches ?? stats.matchesPlayed ?? 1
+  ) || 1
+
   const avg = (...keys) => {
     for (const k of keys) {
       const v = stats[k]
-      if (v != null) return Math.round((Number(v) / apps) * 100) / 100
+      if (v != null && typeof v !== 'object') return Math.round((Number(v) / apps) * 100) / 100
     }
     return undefined
   }
 
+  const mins = stats.minutes_played ?? stats.minutesPlayed
   return {
     date: new Date().toISOString().split('T')[0],
     opponent: `Season avg (${seasonLabel})`,
     competition: 'FotMob Import',
     result: '',
-    minutesPlayed: stats.minutesPlayed != null ? Math.round(Number(stats.minutesPlayed) / apps) : 90,
+    minutesPlayed: mins != null ? Math.round(Number(mins) / apps) : 90,
     goals:          avg('goals'),
     assists:        avg('assists'),
-    keyPasses:      avg('keyPasses', 'keypasses'),
-    shotOnTarget:   avg('shotsOnTarget', 'onTargetScoringAttempt'),
-    shotOffTarget:  avg('shotsOffTarget', 'blockedScoringAttempt'),
+    keyPasses:      avg('keyPasses', 'keypasses', 'key_passes'),
+    shotOnTarget:   avg('shotsOnTarget', 'shots_on_target', 'onTargetScoringAttempt'),
+    shotOffTarget:  avg('shotsOffTarget', 'shots_off_target', 'blockedScoringAttempt'),
     interceptions:  avg('interceptions'),
     clearances:     avg('clearances'),
-    duelsWon:       avg('successfulDuels', 'duelsWon'),
+    duelsWon:       avg('successfulDuels', 'duelsWon', 'duel_won'),
     aerialsWon:     avg('aerialDuelsWon', 'wonContest'),
     foulsCommitted: avg('foulsCommitted', 'fouls'),
     foulsWon:       avg('foulsWon', 'wasFouled'),
-    xG:             avg('xGoals', 'expectedGoals', 'xg'),
-    xA:             avg('xAssists', 'expectedAssists', 'xa'),
+    xG:             avg('xGoals', 'expectedGoals', 'xg', 'expected_goals'),
+    xA:             avg('xAssists', 'expectedAssists', 'xa', 'expected_assists'),
   }
 }
