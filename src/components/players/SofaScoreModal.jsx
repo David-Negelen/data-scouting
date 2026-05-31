@@ -17,6 +17,7 @@ export default function SofaScoreModal({ player, onClose }) {
   const [competitionFilter, setCompetitionFilter] = useState('All')
   const [loading, setLoading]       = useState(false)
   const [error, setError]           = useState('')
+  const [pasteJson, setPasteJson]   = useState('')
 
   useEffect(() => { doSearch(player.name) }, []) // eslint-disable-line
 
@@ -34,20 +35,34 @@ export default function SofaScoreModal({ player, onClose }) {
   }
 
   const handleSelect = async (candidate) => {
+    setSelected({ ...candidate, fotmobId: String(candidate.id) })
     setLoading(true); setError('')
     try {
       const data = await getPlayerData(candidate.id)
-      const seasons = parseSeasonOptions(data)
-      const recent  = parseRecentMatches(data)
-      setSelected({ ...candidate, fotmobId: String(candidate.id) })
-      setSeasonOptions(seasons)
-      setSeasonIdx(0)
-      setMatches(recent)
-      const allIds = new Set(recent.map((_, i) => i))
-      setSelectedMatches(allIds)
-      setStep('import')
-    } catch (e) { setError(e.message) }
-    finally { setLoading(false) }
+      applyPlayerData(data)
+    } catch {
+      // FotMob blocks server-side requests — fall back to manual paste
+      setStep('paste')
+    } finally { setLoading(false) }
+  }
+
+  const applyPlayerData = (data) => {
+    const seasons = parseSeasonOptions(data)
+    const recent  = parseRecentMatches(data)
+    setSeasonOptions(seasons)
+    setSeasonIdx(0)
+    setMatches(recent)
+    setSelectedMatches(new Set(recent.map((_, i) => i)))
+    setStep('import')
+  }
+
+  const handlePaste = () => {
+    setError('')
+    try {
+      applyPlayerData(JSON.parse(pasteJson))
+    } catch (e) {
+      setError('Invalid JSON — make sure you copied the full page: ' + e.message)
+    }
   }
 
   const competitions = ['All', ...Array.from(new Set(matches.map((m) => m.leagueName)))]
@@ -117,6 +132,32 @@ export default function SofaScoreModal({ player, onClose }) {
               )}
             </button>
           ))}
+        </>
+      )}
+
+      {/* STEP: paste (FotMob blocks proxy requests) */}
+      {step === 'paste' && (
+        <>
+          <p style={{ fontSize: 13, margin: 0 }}>
+            FotMob blocks automated requests. Open the link below in your browser, select all (<kbd>⌘A</kbd>), copy (<kbd>⌘C</kbd>), then paste here:
+          </p>
+          <a
+            href={`https://www.fotmob.com/api/data/playerData?id=${selected?.id}`}
+            target="_blank"
+            rel="noopener noreferrer"
+            style={{ fontSize: 12, color: 'var(--accent-primary)', wordBreak: 'break-all' }}
+          >
+            fotmob.com/api/data/playerData?id={selected?.id}
+          </a>
+          <textarea
+            className="input"
+            placeholder="Paste JSON here…"
+            value={pasteJson}
+            onChange={(e) => { setPasteJson(e.target.value); setError('') }}
+            rows={6}
+            style={{ fontFamily: 'JetBrains Mono', fontSize: 11, resize: 'vertical' }}
+          />
+          {error && <p style={{ fontSize: 13, color: 'var(--danger)', margin: 0 }}>{error}</p>}
         </>
       )}
 
@@ -272,6 +313,15 @@ export default function SofaScoreModal({ player, onClose }) {
             {mode === 'matches'
               ? `Import ${matches.filter((_, i) => selectedMatches.has(i)).length} matches`
               : 'Import Season Stats'}
+          </button>
+        )}
+        {step === 'paste' && (
+          <button
+            className="btn btn-primary"
+            onClick={handlePaste}
+            disabled={!pasteJson.trim()}
+          >
+            Parse JSON
           </button>
         )}
         {step === 'search' && !loading && (
