@@ -8,7 +8,7 @@
     "build": "vite build",
     "preview": "vite preview",
     "lint": "eslint . --ext js,jsx --report-unused-disable-directives --max-warnings 0",
-    "server": "cd server && uvicorn main:app --reload --port 8000"
+    "server": "cd server && venv/bin/uvicorn main:app --reload --port 8000"
   },
   "dependencies": {
     "@tanstack/react-query": "^5.25.0",
