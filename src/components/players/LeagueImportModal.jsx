@@ -1,72 +1,83 @@
 import { useState } from 'react'
-import { getCompetitionTeams } from '@/api/footballData'
+import { getPlayers } from '@/api/soccerdata'
 import usePlayersStore from '@/store/playersSlice'
 import { LEAGUES } from '@/constants/leagues'
 
-// football-data.org competition codes for supported leagues
-const FD_CODES = {
-  'premier-league':   'PL',
-  'bundesliga':       'BL1',
-  'laliga':           'PD',
-  'serie-a':          'SA',
-  'ligue1':           'FL1',
-  'eredivisie':       'DED',
-  'primeira-liga':    'PPL',
-  'champions-league': 'CL',
-  'europa-league':    'EL',
-}
+const FBREF_IDS = new Set([
+  'premier-league', 'championship',
+  'bundesliga', 'bundesliga2',
+  'laliga', 'laliga2',
+  'serie-a', 'serie-b',
+  'ligue1', 'ligue2',
+  'eredivisie', 'primeira-liga',
+  'pro-league', 'super-lig',
+  'champions-league', 'europa-league',
+  'mls',
+])
 
-function calcAge(dateOfBirth) {
-  if (!dateOfBirth) return null
-  return Math.floor((Date.now() - new Date(dateOfBirth).getTime()) / (365.25 * 24 * 60 * 60 * 1000))
+const SEASONS = [
+  { id: '2425', label: '2024/25' },
+  { id: '2324', label: '2023/24' },
+  { id: '2223', label: '2022/23' },
+  { id: '2122', label: '2021/22' },
+  { id: '2024', label: '2024 (MLS/calendar)' },
+]
+
+function toMatchLog(p, season) {
+  return {
+    id: crypto.randomUUID(),
+    date: new Date().toISOString().split('T')[0],
+    opponent: `Season ${season}`,
+    competition: 'FBref',
+    isSeason: true,
+    minutesPlayed: p.minutesPlayed ?? undefined,
+    goals:         p.goals       || undefined,
+    assists:       p.assists     || undefined,
+    xG:            p.xG         || undefined,
+    xA:            p.xA         || undefined,
+    yellowCards:   p.yellowCards || undefined,
+    redCards:      p.redCards   || undefined,
+  }
 }
 
 export default function LeagueImportModal({ onClose }) {
-  const players = usePlayersStore((s) => s.players)
+  const players       = usePlayersStore((s) => s.players)
   const importPlayers = usePlayersStore((s) => s.importPlayers)
 
   const [leagueId, setLeagueId] = useState('premier-league')
-  const [status, setStatus] = useState(null) // null | 'loading' | 'done' | 'error'
-  const [message, setMessage] = useState('')
+  const [season, setSeason]     = useState('2425')
+  const [status, setStatus]     = useState(null) // null | 'loading' | 'done' | 'error'
+  const [message, setMessage]   = useState('')
 
-  const supportedLeagues = LEAGUES.filter((l) => FD_CODES[l.id])
+  const supportedLeagues = LEAGUES.filter((l) => FBREF_IDS.has(l.id))
 
   const handleImport = async () => {
     setStatus('loading')
-    setMessage('Fetching squads from football-data.org…')
+    setMessage('Fetching from FBref… first call may take 10-30s while data is downloaded and cached.')
     try {
-      const data = await getCompetitionTeams(FD_CODES[leagueId])
-      const teams = data.teams ?? []
-      setMessage(`Found ${teams.length} teams, processing players…`)
-
-      const existingNames = new Set(players.map((p) => p.name.toLowerCase()))
+      const fetched = await getPlayers(leagueId, season)
       const leagueObj = LEAGUES.find((l) => l.id === leagueId)
-      const newPlayers = []
+      const existingNames = new Set(players.map((p) => p.name.toLowerCase()))
 
-      for (const team of teams) {
-        for (const member of team.squad ?? []) {
-          const key = member.name.toLowerCase()
-          if (existingNames.has(key)) continue
-          existingNames.add(key)
-          newPlayers.push({
-            id: crypto.randomUUID(),
-            name: member.name,
-            age: calcAge(member.dateOfBirth),
-            position: member.position ?? '',
-            club: team.name,
-            league: leagueId,
-            nationality: member.nationality ?? '',
-            status: 'Prospect',
-            matchLogs: [],
-            metrics: {},
-            createdAt: new Date().toISOString(),
-          })
-        }
-      }
+      const newPlayers = fetched
+        .filter((p) => p.name && !existingNames.has(p.name.toLowerCase()))
+        .map((p) => ({
+          id:          crypto.randomUUID(),
+          name:        p.name,
+          age:         p.age != null ? parseInt(p.age) : undefined,
+          position:    p.position ?? '',
+          club:        p.team ?? '',
+          league:      leagueId,
+          nationality: p.nationality ?? '',
+          status:      'Prospect',
+          matchLogs:   p.minutesPlayed ? [toMatchLog(p, season)] : [],
+          metrics:     {},
+          createdAt:   new Date().toISOString(),
+        }))
 
       importPlayers([...players, ...newPlayers])
       setStatus('done')
-      setMessage(`Imported ${newPlayers.length} players from ${leagueObj?.label ?? leagueId}.`)
+      setMessage(`Imported ${newPlayers.length} new players from ${leagueObj?.label ?? leagueId} ${season}.`)
     } catch (err) {
       setStatus('error')
       setMessage(err.message)
@@ -74,36 +85,47 @@ export default function LeagueImportModal({ onClose }) {
   }
 
   const msgStyle = {
-    padding: '10px 14px',
-    borderRadius: 8,
-    marginBottom: 16,
-    fontSize: 13,
+    padding: '10px 14px', borderRadius: 8, marginBottom: 16, fontSize: 13,
     background: status === 'error' ? 'rgba(255,80,80,0.1)' : 'rgba(200,242,48,0.08)',
     color: status === 'error' ? '#ff6b6b' : 'var(--text-primary)',
   }
 
   return (
     <div>
-      <div style={{ marginBottom: 16 }}>
-        <label style={{ display: 'block', fontWeight: 600, fontSize: 13, marginBottom: 6 }}>
-          League
+      <div style={{ display: 'flex', gap: 12, marginBottom: 16 }}>
+        <label style={{ flex: 1 }}>
+          <span style={{ display: 'block', fontWeight: 600, fontSize: 13, marginBottom: 6 }}>League</span>
+          <select
+            className="input"
+            value={leagueId}
+            onChange={(e) => setLeagueId(e.target.value)}
+            disabled={status === 'loading'}
+            style={{ width: '100%' }}
+          >
+            {supportedLeagues.map((l) => (
+              <option key={l.id} value={l.id}>{l.label}</option>
+            ))}
+          </select>
         </label>
-        <select
-          className="input"
-          value={leagueId}
-          onChange={(e) => setLeagueId(e.target.value)}
-          disabled={status === 'loading'}
-          style={{ width: '100%' }}
-        >
-          {supportedLeagues.map((l) => (
-            <option key={l.id} value={l.id}>{l.label}</option>
-          ))}
-        </select>
+        <label style={{ width: 140 }}>
+          <span style={{ display: 'block', fontWeight: 600, fontSize: 13, marginBottom: 6 }}>Season</span>
+          <select
+            className="input"
+            value={season}
+            onChange={(e) => setSeason(e.target.value)}
+            disabled={status === 'loading'}
+            style={{ width: '100%' }}
+          >
+            {SEASONS.map((s) => (
+              <option key={s.id} value={s.id}>{s.label}</option>
+            ))}
+          </select>
+        </label>
       </div>
 
       <p style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 16 }}>
-        Requires a <strong>football-data.org API key</strong> configured in Settings.
-        Imports all squad members as Prospects. Players with names already in your database are skipped.
+        Pulls all players from <strong>FBref</strong> via soccerdata. Includes season totals (goals, assists, xG, minutes).
+        Data is cached locally after the first fetch.
       </p>
 
       {message && <div style={msgStyle}>{status === 'loading' && '⏳ '}{message}</div>}
@@ -113,12 +135,8 @@ export default function LeagueImportModal({ onClose }) {
           {status === 'done' ? 'Close' : 'Cancel'}
         </button>
         {status !== 'done' && (
-          <button
-            className="btn btn-primary"
-            onClick={handleImport}
-            disabled={status === 'loading'}
-          >
-            {status === 'loading' ? 'Importing…' : 'Import League'}
+          <button className="btn btn-primary" onClick={handleImport} disabled={status === 'loading'}>
+            {status === 'loading' ? 'Fetching…' : 'Import League'}
           </button>
         )}
       </div>

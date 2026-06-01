@@ -1,332 +1,168 @@
-import { useState, useEffect } from 'react'
-import { searchPlayers, getPlayerData, parseSeasonOptions, parseRecentMatches, mapSeasonToLog, mapMatchToLog } from '@/api/fotmob'
+import { useState } from 'react'
+import { getPlayers } from '@/api/soccerdata'
 import { usePlayersStore } from '@/store'
+import { LEAGUES } from '@/constants/leagues'
+
+const FBREF_IDS = [
+  'premier-league', 'championship',
+  'bundesliga', 'bundesliga2',
+  'laliga', 'laliga2',
+  'serie-a', 'serie-b',
+  'ligue1', 'ligue2',
+  'eredivisie', 'primeira-liga',
+  'pro-league', 'super-lig',
+  'champions-league', 'europa-league',
+  'mls',
+]
+
+const SEASONS = [
+  { id: '2425', label: '2024/25' },
+  { id: '2324', label: '2023/24' },
+  { id: '2223', label: '2022/23' },
+  { id: '2122', label: '2021/22' },
+  { id: '2024', label: '2024 (MLS/calendar)' },
+]
+
+const normalize = (s) => (s ?? '').toLowerCase().replace(/[^a-z0-9]/g, '')
 
 export default function SofaScoreModal({ player, onClose }) {
   const addMatchLog  = usePlayersStore((s) => s.addMatchLog)
   const updatePlayer = usePlayersStore((s) => s.updatePlayer)
 
-  const [step, setStep]             = useState('search')
-  const [candidates, setCandidates] = useState([])
-  const [selected, setSelected]     = useState(null)
-  const [mode, setMode]             = useState('matches') // 'matches' | 'season'
-  const [seasonOptions, setSeasonOptions] = useState([])
-  const [seasonIdx, setSeasonIdx]   = useState(0)
-  const [matches, setMatches]       = useState([])
-  const [selectedMatches, setSelectedMatches] = useState(new Set())
-  const [competitionFilter, setCompetitionFilter] = useState('All')
-  const [loading, setLoading]       = useState(false)
-  const [error, setError]           = useState('')
-  const [pasteJson, setPasteJson]   = useState('')
+  const defaultLeague = FBREF_IDS.includes(player.league) ? player.league : 'premier-league'
 
-  useEffect(() => { doSearch(player.name) }, []) // eslint-disable-line
+  const [leagueId, setLeagueId] = useState(defaultLeague)
+  const [season, setSeason]     = useState('2425')
+  const [step, setStep]         = useState('config') // 'config' | 'loading' | 'confirm' | 'done'
+  const [found, setFound]       = useState(null)
+  const [error, setError]       = useState('')
 
-  const doSearch = async (name) => {
-    setLoading(true); setError('')
-    try {
-      const data = await searchPlayers(name)
-      const groups = Array.isArray(data) ? data : []
-      const group = groups.find((g) => g.title?.key === 'players') ?? groups[0]
-      const hits = (group?.suggestions ?? []).filter((s) => s.type === 'player' && !s.isCoach).slice(0, 6)
-      setCandidates(hits)
-      if (!hits.length) setError('No players found on FotMob.')
-    } catch (e) { setError(e.message) }
-    finally { setLoading(false) }
-  }
+  const supportedLeagues = LEAGUES.filter((l) => FBREF_IDS.includes(l.id))
 
-  const handleSelect = async (candidate) => {
-    setSelected({ ...candidate, fotmobId: String(candidate.id) })
-    setLoading(true); setError('')
-    try {
-      const data = await getPlayerData(candidate.id)
-      applyPlayerData(data)
-    } catch {
-      // FotMob blocks server-side requests — fall back to manual paste
-      setStep('paste')
-    } finally { setLoading(false) }
-  }
-
-  const applyPlayerData = (data) => {
-    const seasons = parseSeasonOptions(data)
-    const recent  = parseRecentMatches(data)
-    setSeasonOptions(seasons)
-    setSeasonIdx(0)
-    setMatches(recent)
-    setSelectedMatches(new Set(recent.map((_, i) => i)))
-    setStep('import')
-  }
-
-  const handlePaste = () => {
+  const handleFetch = async () => {
+    setStep('loading')
     setError('')
     try {
-      applyPlayerData(JSON.parse(pasteJson))
+      const all = await getPlayers(leagueId, season)
+      const target = normalize(player.name)
+      const match =
+        all.find((p) => normalize(p.name) === target) ??
+        all.find((p) => {
+          const pn = normalize(p.name)
+          return pn.includes(target) || target.includes(pn)
+        })
+
+      if (!match) {
+        setError(`"${player.name}" not found in FBref data for this league/season. Try a different league or season.`)
+        setStep('config')
+        return
+      }
+      setFound(match)
+      setStep('confirm')
     } catch (e) {
-      setError('Invalid JSON — make sure you copied the full page: ' + e.message)
+      setError(e.message)
+      setStep('config')
     }
-  }
-
-  const competitions = ['All', ...Array.from(new Set(matches.map((m) => m.leagueName)))]
-  const visibleMatches = competitionFilter === 'All'
-    ? matches
-    : matches.filter((m) => m.leagueName === competitionFilter)
-
-  const toggleMatch = (i) => {
-    setSelectedMatches((prev) => {
-      const next = new Set(prev)
-      next.has(i) ? next.delete(i) : next.add(i)
-      return next
-    })
-  }
-
-  const toggleAll = () => {
-    const visibleIds = new Set(visibleMatches.map((_, vi) => matches.indexOf(visibleMatches[vi])))
-    const allSelected = [...visibleIds].every((i) => selectedMatches.has(i))
-    setSelectedMatches((prev) => {
-      const next = new Set(prev)
-      visibleIds.forEach((i) => allSelected ? next.delete(i) : next.add(i))
-      return next
-    })
   }
 
   const handleImport = () => {
-    if (mode === 'season') {
-      const opt = seasonOptions[seasonIdx]
-      if (!opt) return
-      addMatchLog(player.id, mapSeasonToLog(opt))
-    } else {
-      const toImport = matches.filter((_, i) => selectedMatches.has(i))
-      toImport.forEach((m) => addMatchLog(player.id, mapMatchToLog(m)))
-    }
-    updatePlayer(player.id, { fotmobId: selected.fotmobId })
+    addMatchLog(player.id, {
+      id:            crypto.randomUUID(),
+      date:          new Date().toISOString().split('T')[0],
+      opponent:      `Season ${season}`,
+      competition:   'FBref',
+      isSeason:      true,
+      minutesPlayed: found.minutesPlayed ?? undefined,
+      goals:         found.goals       || undefined,
+      assists:       found.assists     || undefined,
+      xG:            found.xG         || undefined,
+      xA:            found.xA         || undefined,
+      yellowCards:   found.yellowCards || undefined,
+      redCards:      found.redCards   || undefined,
+    })
+    if (found.team) updatePlayer(player.id, { club: found.team })
     setStep('done')
   }
 
-  const fmtDate = (iso) => {
-    if (!iso) return ''
-    const d = new Date(iso)
-    return d.toLocaleDateString('en-GB', { day: '2-digit', month: 'short' })
-  }
+  const Stat = ({ label, value }) =>
+    value != null ? (
+      <span style={{ color: 'var(--text-muted)', fontSize: 12 }}>
+        {label}:{' '}
+        <strong style={{ color: 'var(--accent-primary)', fontFamily: 'JetBrains Mono' }}>{value}</strong>
+      </span>
+    ) : null
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-      {/* STEP: search */}
-      {step === 'search' && (
+      {step === 'config' && (
         <>
-          <p style={{ fontSize: 13, color: 'var(--text-muted)' }}>
-            Searching FotMob for <strong>{player.name}</strong>…
+          <p style={{ fontSize: 13, color: 'var(--text-muted)', margin: 0 }}>
+            Fetch season stats for <strong>{player.name}</strong> from FBref.
           </p>
-          {loading && <p style={{ fontSize: 13, color: 'var(--text-muted)' }}>Loading…</p>}
-          {error   && <p style={{ fontSize: 13, color: 'var(--danger)' }}>{error}</p>}
-          {!loading && candidates.map((c) => (
-            <button
-              key={c.id}
-              className="btn btn-secondary"
-              style={{ textAlign: 'left', display: 'flex', gap: 12, alignItems: 'center' }}
-              onClick={() => handleSelect(c)}
-            >
-              <span style={{ fontWeight: 600, flex: 1 }}>{c.name ?? c.playerName}</span>
-              {(c.teamName || c.leagueName) && (
-                <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>
-                  {[c.teamName, c.leagueName].filter(Boolean).join(' · ')}
-                </span>
-              )}
-            </button>
-          ))}
-        </>
-      )}
-
-      {/* STEP: paste (FotMob blocks proxy requests) */}
-      {step === 'paste' && (
-        <>
-          <p style={{ fontSize: 13, margin: 0 }}>
-            FotMob blocks automated requests. Open the link below in your browser, select all (<kbd>⌘A</kbd>), copy (<kbd>⌘C</kbd>), then paste here:
-          </p>
-          <a
-            href={`https://www.fotmob.com/api/data/playerData?id=${selected?.id}`}
-            target="_blank"
-            rel="noopener noreferrer"
-            style={{ fontSize: 12, color: 'var(--accent-primary)', wordBreak: 'break-all' }}
-          >
-            fotmob.com/api/data/playerData?id={selected?.id}
-          </a>
-          <textarea
-            className="input"
-            placeholder="Paste JSON here…"
-            value={pasteJson}
-            onChange={(e) => { setPasteJson(e.target.value); setError('') }}
-            rows={6}
-            style={{ fontFamily: 'JetBrains Mono', fontSize: 11, resize: 'vertical' }}
-          />
+          <div style={{ display: 'flex', gap: 12 }}>
+            <label style={{ flex: 1 }}>
+              <span style={{ display: 'block', fontSize: 12, color: 'var(--text-muted)', marginBottom: 4 }}>League</span>
+              <select className="input" value={leagueId} onChange={(e) => setLeagueId(e.target.value)} style={{ width: '100%' }}>
+                {supportedLeagues.map((l) => (
+                  <option key={l.id} value={l.id}>{l.label}</option>
+                ))}
+              </select>
+            </label>
+            <label style={{ width: 130 }}>
+              <span style={{ display: 'block', fontSize: 12, color: 'var(--text-muted)', marginBottom: 4 }}>Season</span>
+              <select className="input" value={season} onChange={(e) => setSeason(e.target.value)} style={{ width: '100%' }}>
+                {SEASONS.map((s) => (
+                  <option key={s.id} value={s.id}>{s.label}</option>
+                ))}
+              </select>
+            </label>
+          </div>
           {error && <p style={{ fontSize: 13, color: 'var(--danger)', margin: 0 }}>{error}</p>}
         </>
       )}
 
-      {/* STEP: import */}
-      {step === 'import' && (
+      {step === 'loading' && (
+        <p style={{ fontSize: 13, color: 'var(--text-muted)' }}>
+          Fetching from FBref… first call may take 10-30s while data is downloaded and cached.
+        </p>
+      )}
+
+      {step === 'confirm' && found && (
         <>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <p style={{ fontSize: 13, margin: 0 }}>
-              <strong>{selected?.name}</strong>
-              {selected?.teamName && <span style={{ color: 'var(--text-muted)' }}> · {selected.teamName}</span>}
-            </p>
-            {/* Mode toggle */}
-            <div style={{ display: 'flex', gap: 4, background: 'var(--bg-surface)', borderRadius: 6, padding: 3 }}>
-              {['matches', 'season'].map((m) => (
-                <button
-                  key={m}
-                  onClick={() => setMode(m)}
-                  style={{
-                    background: mode === m ? 'var(--accent-primary)' : 'transparent',
-                    color: mode === m ? '#000' : 'var(--text-muted)',
-                    border: 'none', borderRadius: 4, padding: '4px 10px',
-                    fontSize: 11, fontWeight: 700, cursor: 'pointer', textTransform: 'capitalize',
-                  }}
-                >
-                  {m === 'matches' ? 'Match Logs' : 'Season Totals'}
-                </button>
-              ))}
-            </div>
+          <p style={{ fontSize: 13, margin: 0 }}>
+            Found: <strong>{found.name}</strong>
+            {found.team && <span style={{ color: 'var(--text-muted)' }}> · {found.team}</span>}
+          </p>
+          <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap' }}>
+            <Stat label="Apps"    value={found.matchesPlayed} />
+            <Stat label="Min"     value={found.minutesPlayed} />
+            <Stat label="Goals"   value={found.goals} />
+            <Stat label="Assists" value={found.assists} />
+            <Stat label="xG"      value={found.xG} />
+            <Stat label="xA"      value={found.xA} />
           </div>
-
-          {mode === 'matches' && (
-            <>
-              {/* Competition filter */}
-              {competitions.length > 2 && (
-                <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-                  {competitions.map((c) => (
-                    <button
-                      key={c}
-                      onClick={() => setCompetitionFilter(c)}
-                      style={{
-                        fontSize: 11, padding: '3px 8px', borderRadius: 4, border: '1px solid var(--border)',
-                        background: competitionFilter === c ? 'var(--accent-primary)' : 'transparent',
-                        color: competitionFilter === c ? '#000' : 'var(--text-muted)',
-                        cursor: 'pointer',
-                      }}
-                    >
-                      {c}
-                    </button>
-                  ))}
-                </div>
-              )}
-
-              {/* Match list */}
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 4, maxHeight: 320, overflowY: 'auto' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '4px 8px', fontSize: 11, color: 'var(--text-muted)' }}>
-                  <input
-                    type="checkbox"
-                    checked={visibleMatches.every((_, vi) => selectedMatches.has(matches.indexOf(visibleMatches[vi])))}
-                    onChange={toggleAll}
-                    style={{ cursor: 'pointer' }}
-                  />
-                  <span>Select all ({visibleMatches.filter((_, vi) => selectedMatches.has(matches.indexOf(visibleMatches[vi]))).length}/{visibleMatches.length})</span>
-                </div>
-                {visibleMatches.map((m, vi) => {
-                  const idx = matches.indexOf(m)
-                  const checked = selectedMatches.has(idx)
-                  return (
-                    <label
-                      key={idx}
-                      style={{
-                        display: 'flex', alignItems: 'center', gap: 10, padding: '6px 8px',
-                        borderRadius: 6, cursor: 'pointer',
-                        background: checked ? 'rgba(200,242,48,0.06)' : 'transparent',
-                        border: `1px solid ${checked ? 'rgba(200,242,48,0.2)' : 'var(--border)'}`,
-                      }}
-                    >
-                      <input type="checkbox" checked={checked} onChange={() => toggleMatch(idx)} style={{ cursor: 'pointer' }} />
-                      <span style={{ fontSize: 11, color: 'var(--text-muted)', width: 52, flexShrink: 0 }}>
-                        {fmtDate(m.matchDate?.utcTime)}
-                      </span>
-                      <span style={{ fontSize: 12, flex: 1, fontWeight: 600 }}>vs {m.opponentTeamName}</span>
-                      <span style={{ fontSize: 11, color: 'var(--text-muted)', width: 60, flexShrink: 0 }}>{m.leagueName}</span>
-                      <span style={{ fontFamily: 'JetBrains Mono', fontSize: 11, width: 28, flexShrink: 0 }}>
-                        {m.isHomeTeam ? `${m.homeScore}-${m.awayScore}` : `${m.awayScore}-${m.homeScore}`}
-                      </span>
-                      <span style={{ fontFamily: 'JetBrains Mono', fontSize: 11, color: 'var(--accent-primary)', width: 40, flexShrink: 0 }}>
-                        {m.goals > 0 && `G${m.goals}`}{m.goals > 0 && m.assists > 0 && ' '}{m.assists > 0 && `A${m.assists}`}
-                      </span>
-                      <span style={{ fontFamily: 'JetBrains Mono', fontSize: 11, color: 'var(--text-muted)', width: 30, flexShrink: 0 }}>
-                        {parseFloat(m.ratingProps?.rating) > 0 ? parseFloat(m.ratingProps.rating).toFixed(1) : ''}
-                      </span>
-                    </label>
-                  )
-                })}
-              </div>
-            </>
-          )}
-
-          {mode === 'season' && (
-            <>
-              {seasonOptions.length > 0 ? (
-                <label style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-                  <span style={{ fontSize: 12, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>
-                    Season / Competition
-                  </span>
-                  <select className="input" value={seasonIdx} onChange={(e) => setSeasonIdx(Number(e.target.value))}>
-                    {seasonOptions.map((o, i) => (
-                      <option key={i} value={i}>{o.label}</option>
-                    ))}
-                  </select>
-                  {seasonOptions[seasonIdx] && (
-                    <div style={{ display: 'flex', gap: 16, fontSize: 12, marginTop: 4 }}>
-                      {[
-                        ['Apps',    seasonOptions[seasonIdx].appearances],
-                        ['Goals',   seasonOptions[seasonIdx].goals],
-                        ['Assists', seasonOptions[seasonIdx].assists],
-                        ['Rating',  seasonOptions[seasonIdx].rating?.toFixed(2)],
-                      ].filter(([, v]) => v != null).map(([label, value]) => (
-                        <span key={label} style={{ color: 'var(--text-muted)' }}>
-                          {label}: <strong style={{ color: 'var(--accent-primary)', fontFamily: 'JetBrains Mono' }}>{value}</strong>
-                        </span>
-                      ))}
-                    </div>
-                  )}
-                </label>
-              ) : (
-                <p style={{ fontSize: 13, color: 'var(--text-muted)' }}>No season history available.</p>
-              )}
-            </>
-          )}
-
-          {error && <p style={{ fontSize: 13, color: 'var(--danger)' }}>{error}</p>}
-          {loading && <p style={{ fontSize: 13, color: 'var(--text-muted)' }}>Loading…</p>}
+          <p style={{ fontSize: 12, color: 'var(--text-muted)', margin: 0 }}>
+            Will be added as a season-total match log entry.
+          </p>
         </>
       )}
 
       {step === 'done' && (
-        <p style={{ fontSize: 14, color: 'var(--success)' }}>
-          Imported. Check the Match Logs tab.
-        </p>
+        <p style={{ fontSize: 14, color: 'var(--success)' }}>Imported. Check the Match Logs tab.</p>
       )}
 
       <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
         <button className="btn btn-secondary" onClick={onClose}>
           {step === 'done' ? 'Close' : 'Cancel'}
         </button>
-        {step === 'import' && (
-          <button
-            className="btn btn-primary"
-            onClick={handleImport}
-            disabled={loading || (mode === 'matches' && selectedMatches.size === 0)}
-          >
-            {mode === 'matches'
-              ? `Import ${matches.filter((_, i) => selectedMatches.has(i)).length} matches`
-              : 'Import Season Stats'}
+        {step === 'config' && (
+          <button className="btn btn-primary" onClick={handleFetch}>
+            Fetch from FBref
           </button>
         )}
-        {step === 'paste' && (
-          <button
-            className="btn btn-primary"
-            onClick={handlePaste}
-            disabled={!pasteJson.trim()}
-          >
-            Parse JSON
-          </button>
-        )}
-        {step === 'search' && !loading && (
-          <button className="btn btn-ghost" style={{ fontSize: 12 }} onClick={() => doSearch(player.name)}>
-            Retry
+        {step === 'confirm' && (
+          <button className="btn btn-primary" onClick={handleImport}>
+            Import
           </button>
         )}
       </div>

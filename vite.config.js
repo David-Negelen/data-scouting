@@ -19,16 +19,10 @@ export default defineConfig({
         changeOrigin: true,
         rewrite: (p) => p.replace(/^\/api\/football-data/, ''),
       },
-      '/api/fotmob': {
-        target: 'https://www.fotmob.com',
+      '/api/soccerdata': {
+        target: 'http://localhost:8000',
         changeOrigin: true,
-        rewrite: (p) => p.replace(/^\/api\/fotmob/, '/api'),
-        headers: {
-          'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
-          'Accept': 'application/json, text/plain, */*',
-          'Accept-Language': 'en-US,en;q=0.9',
-          'Referer': 'https://www.fotmob.com/',
-        },
+        rewrite: (p) => p.replace(/^\/api\/soccerdata/, ''),
       },
     },
   },
