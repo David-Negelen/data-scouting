@@ -1,4 +1,4 @@
-# Run: uvicorn main:app --reload --port 8000
+# Run: uvicorn main:app --reload --reload-exclude 'venv' --port 8000
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 import soccerdata as sd
@@ -13,24 +13,14 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-FBREF_LEAGUES = {
-    "premier-league":   "ENG-Premier League",
-    "championship":     "ENG-Championship",
-    "bundesliga":       "GER-Bundesliga",
-    "bundesliga2":      "GER-2. Bundesliga",
-    "laliga":           "ESP-La Liga",
-    "laliga2":          "ESP-Segunda División",
-    "serie-a":          "ITA-Serie A",
-    "serie-b":          "ITA-Serie B",
-    "ligue1":           "FRA-Ligue 1",
-    "ligue2":           "FRA-Ligue 2",
-    "eredivisie":       "NED-Eredivisie",
-    "primeira-liga":    "POR-Primeira Liga",
-    "pro-league":       "BEL-First Division A",
-    "super-lig":        "TUR-Süper Lig",
-    "champions-league": "INT-Champions League",
-    "europa-league":    "INT-Europa League",
-    "mls":              "USA-MLS",
+# Understat covers only the top 5 European leagues but uses plain HTTP —
+# no browser automation, no CAPTCHA, reliable and fast.
+LEAGUES = {
+    "premier-league": "ENG-Premier League",
+    "bundesliga":     "GER-Bundesliga",
+    "laliga":         "ESP-La Liga",
+    "serie-a":        "ITA-Serie A",
+    "ligue1":         "FRA-Ligue 1",
 }
 
 SEASONS = [
@@ -38,8 +28,6 @@ SEASONS = [
     {"id": "2324", "label": "2023/24"},
     {"id": "2223", "label": "2022/23"},
     {"id": "2122", "label": "2021/22"},
-    {"id": "2024", "label": "2024 (MLS/calendar)"},
-    {"id": "2023", "label": "2023 (MLS/calendar)"},
 ]
 
 
@@ -60,7 +48,6 @@ def safe(v):
 
 
 def flatten_cols(df: pd.DataFrame) -> pd.DataFrame:
-    """Collapse MultiIndex columns to their last (most specific) level."""
     if isinstance(df.columns, pd.MultiIndex):
         df.columns = [c[-1] if isinstance(c, tuple) else c for c in df.columns]
     return df
@@ -76,28 +63,27 @@ def find(df: pd.DataFrame, *names: str) -> str | None:
 def build_player(row: pd.Series, cols: dict) -> dict:
     get = lambda k: safe(row.get(cols[k])) if cols.get(k) else None
     return {
-        "name":          get("name"),
-        "team":          get("team"),
-        "nationality":   get("nation"),
-        "position":      get("pos"),
-        "age":           get("age"),
-        "matchesPlayed": get("mp"),
-        "minutesPlayed": get("min"),
-        "goals":         get("gls"),
-        "assists":       get("ast"),
-        "xG":            get("xg"),
-        "xA":            get("xag"),
-        "yellowCards":   get("crdy"),
-        "redCards":      get("crdr"),
-        "npxG":          get("npxg"),
-        "progressiveCarries":  get("prgc"),
-        "progressivePasses":   get("prgp"),
+        "name":           get("name"),
+        "team":           get("team"),
+        "nationality":    get("nation"),
+        "position":       get("pos"),
+        "matchesPlayed":  get("mp"),
+        "minutesPlayed":  get("min"),
+        "goals":          get("gls"),
+        "assists":        get("ast"),
+        "xG":             get("xg"),
+        "xA":             get("xag"),
+        "yellowCards":    get("crdy"),
+        "redCards":       get("crdr"),
+        "shots":          get("shots"),
+        "keyPasses":      get("keypasses"),
+        "npxG":           get("npxg"),
     }
 
 
 @app.get("/leagues")
 def list_leagues():
-    return [{"id": k, "fbref": v} for k, v in FBREF_LEAGUES.items()]
+    return [{"id": k, "label": k} for k in LEAGUES]
 
 
 @app.get("/seasons")
@@ -107,34 +93,33 @@ def list_seasons():
 
 @app.get("/players/{league_id}/{season}")
 def get_players(league_id: str, season: str):
-    fbref_name = FBREF_LEAGUES.get(league_id)
-    if not fbref_name:
-        raise HTTPException(404, f"Unknown league: {league_id}")
+    league_name = LEAGUES.get(league_id)
+    if not league_name:
+        raise HTTPException(404, f"Unsupported league '{league_id}'. Supported: {list(LEAGUES.keys())}")
     try:
-        fbref = sd.FBref(fbref_name, season)
-        df = fbref.read_player_season_stats(stat_type="standard")
+        us = sd.Understat(league_name, season)
+        df = us.read_player_season_stats()
     except Exception as e:
         raise HTTPException(500, str(e))
 
     df = flatten_cols(df).reset_index()
 
     cols = {
-        "name":  find(df, "player", "Player"),
-        "team":  find(df, "team", "Team", "Squad"),
-        "nation": find(df, "nation", "Nation"),
-        "pos":   find(df, "pos", "Pos"),
-        "age":   find(df, "age", "Age"),
-        "mp":    find(df, "MP"),
-        "min":   find(df, "Min"),
-        "gls":   find(df, "Gls"),
-        "ast":   find(df, "Ast"),
-        "xg":    find(df, "xG"),
-        "xag":   find(df, "xAG"),
-        "crdy":  find(df, "CrdY"),
-        "crdr":  find(df, "CrdR"),
-        "npxg":  find(df, "npxG"),
-        "prgc":  find(df, "PrgC"),
-        "prgp":  find(df, "PrgP"),
+        "name":      find(df, "player", "Player"),
+        "team":      find(df, "team", "Team"),
+        "nation":    None,  # Understat doesn't provide nationality
+        "pos":       find(df, "position", "pos"),
+        "mp":        find(df, "matches", "games", "MP"),
+        "min":       find(df, "minutes", "time", "Min"),
+        "gls":       find(df, "goals", "Gls"),
+        "ast":       find(df, "assists", "Ast"),
+        "xg":        find(df, "xg", "xG"),
+        "xag":       find(df, "xa", "xA", "xAG"),
+        "crdy":      find(df, "yellow_cards", "CrdY"),
+        "crdr":      find(df, "red_cards", "CrdR"),
+        "shots":     find(df, "shots"),
+        "keypasses": find(df, "key_passes"),
+        "npxg":      find(df, "np_xg", "npxG"),
     }
 
     players = [build_player(row, cols) for _, row in df.iterrows()]

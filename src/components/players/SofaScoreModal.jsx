@@ -3,17 +3,7 @@ import { getPlayers } from '@/api/soccerdata'
 import { usePlayersStore } from '@/store'
 import { LEAGUES } from '@/constants/leagues'
 
-const FBREF_IDS = [
-  'premier-league', 'championship',
-  'bundesliga', 'bundesliga2',
-  'laliga', 'laliga2',
-  'serie-a', 'serie-b',
-  'ligue1', 'ligue2',
-  'eredivisie', 'primeira-liga',
-  'pro-league', 'super-lig',
-  'champions-league', 'europa-league',
-  'mls',
-]
+const UNDERSTAT_IDS = ['premier-league', 'bundesliga', 'laliga', 'serie-a', 'ligue1']
 
 const SEASONS = [
   { id: '2425', label: '2024/25' },
@@ -29,7 +19,7 @@ export default function SofaScoreModal({ player, onClose }) {
   const addMatchLog  = usePlayersStore((s) => s.addMatchLog)
   const updatePlayer = usePlayersStore((s) => s.updatePlayer)
 
-  const defaultLeague = FBREF_IDS.includes(player.league) ? player.league : 'premier-league'
+  const defaultLeague = UNDERSTAT_IDS.includes(player.league) ? player.league : 'premier-league'
 
   const [leagueId, setLeagueId] = useState(defaultLeague)
   const [season, setSeason]     = useState('2425')
@@ -37,7 +27,7 @@ export default function SofaScoreModal({ player, onClose }) {
   const [found, setFound]       = useState(null)
   const [error, setError]       = useState('')
 
-  const supportedLeagues = LEAGUES.filter((l) => FBREF_IDS.includes(l.id))
+  const supportedLeagues = LEAGUES.filter((l) => UNDERSTAT_IDS.includes(l.id))
 
   const handleFetch = async () => {
     setStep('loading')

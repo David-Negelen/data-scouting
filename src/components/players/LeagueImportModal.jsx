@@ -3,17 +3,8 @@ import { getPlayers } from '@/api/soccerdata'
 import usePlayersStore from '@/store/playersSlice'
 import { LEAGUES } from '@/constants/leagues'
 
-const FBREF_IDS = new Set([
-  'premier-league', 'championship',
-  'bundesliga', 'bundesliga2',
-  'laliga', 'laliga2',
-  'serie-a', 'serie-b',
-  'ligue1', 'ligue2',
-  'eredivisie', 'primeira-liga',
-  'pro-league', 'super-lig',
-  'champions-league', 'europa-league',
-  'mls',
-])
+// Understat covers only the top 5 European leagues
+const UNDERSTAT_IDS = new Set(['premier-league', 'bundesliga', 'laliga', 'serie-a', 'ligue1'])
 
 const SEASONS = [
   { id: '2425', label: '2024/25' },
@@ -49,7 +40,7 @@ export default function LeagueImportModal({ onClose }) {
   const [status, setStatus]     = useState(null) // null | 'loading' | 'done' | 'error'
   const [message, setMessage]   = useState('')
 
-  const supportedLeagues = LEAGUES.filter((l) => FBREF_IDS.has(l.id))
+  const supportedLeagues = LEAGUES.filter((l) => UNDERSTAT_IDS.has(l.id))
 
   const handleImport = async () => {
     setStatus('loading')
@@ -124,7 +115,7 @@ export default function LeagueImportModal({ onClose }) {
       </div>
 
       <p style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 16 }}>
-        Pulls all players from <strong>FBref</strong> via soccerdata. Includes season totals (goals, assists, xG, minutes).
+        Pulls all players from <strong>Understat</strong> via soccerdata. Includes goals, assists, xG, xA, shots, minutes.
         Data is cached locally after the first fetch.
       </p>
 
